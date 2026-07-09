@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Эффективность сотрудников ЦРСТ</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #6b7280;
+            margin-bottom: 30px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+        
+        .error {
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .employee-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 24px;
+            margin-bottom: 16px;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .employee-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 16px;
+        }
+        
+        .employee-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        
+        .employee-rank {
+            background: #3b82f6;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.875rem;
+        }
+        
+        .stat-label {
+            color: #6b7280;
+        }
+        
+        .stat-value {
+            font-weight: 600;
+            color: #1f2937;
+        }
+        
+        .stat-value.green {
+            color: #16a34a;
+        }
+        
+        .stat-value.blue {
+            color: #2563eb;
+        }
+        
+        .work-types-section {
+            margin-top: 16px;
+        }
+        
+        .work-types-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+        
+        .work-types-table {
+            background: #f9fafb;
+            border-radius: 6px;
+            padding: 12px;
+        }
+        
+        .work-types-table table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        
+        .work-types-table th {
+            text-align: left;
+            color: #6b7280;
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+            font-weight: 500;
+        }
+        
+        .work-types-table td {
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+            color: #1f2937;
+        }
+        
+        .work-types-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .work-types-table .amount {
+            color: #16a34a;
+            font-weight: 600;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+        
+        .file-input {
+            margin-bottom: 20px;
+            padding: 16px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .file-input label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #374151;
+        }
+        
+        .file-input input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Эффективность сотрудников ЦРСТ</h1>
+        <p class="subtitle">Участок инсталляции и текущего развития</p>
+        
+        <div class="file-input">
+            <label for="excelFile">Загрузить Excel файл с данными:</label>
+            <input type="file" id="excelFile" accept=".xlsx,.xls">
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">Обработка данных...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        // File input handler
+        document.getElementById('excelFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('error').style.display = 'none';
+                document.getElementById('results').innerHTML = '';
+                
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    try {
+                        const data = new Uint8Array(event.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        
+                        // Get first sheet
+                        const sheetName = workbook.SheetNames[0];
+                        const sheet = workbook.Sheets[sheetName];
+                        
+                        // Convert to array of arrays
+                        const sheetData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                        
+                        calculateAndDisplayEfficiency(sheetData);
+                    } catch (error) {
+                        showError('Ошибка при чтении Excel файла: ' + error.message);
+                        document.getElementById('loading').style.display = 'none';
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
+        
+        function calculateAndDisplayEfficiency(sheetData) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+            
+            try {
+                if (!sheetData || sheetData.length < 4) {
+                    throw new Error('Недостаточно данных в файле');
+                }
+                
+                // Headers (row 2, index 1)
+                const headers = sheetData[1];
+                
+                // Rates (row 3, index 2)
+                const rates = sheetData[2];
+                
+                // Orders data (starting from row 4, index 3)
+                const ordersData = sheetData.slice(3);
+                
+                // Employee data structure
+                const employees = {};
+                
+                // Process each order
+                ordersData.forEach(row => {
+                    const employeeName = row[1];
+                    const address = row[2];
+                    const orderType = row[3];
+                    const orderDate = row[4];
+                    const totalAmount = row[56];
+                    
+                    if (!employeeName) return;
+                    
+                    // Convert Excel date to JavaScript date
+                    let jsDate = null;
+                    if (orderDate && typeof orderDate === 'number') {
+                        jsDate = new Date(Math.round((orderDate - 25569) * 86400 * 1000));
+                    }
+                    
+                    // Initialize employee if not exists
+                    if (!employees[employeeName]) {
+                        employees[employeeName] = {
+                            name: employeeName,
+                            totalOrders: 0,
+                            totalAmount: 0,
+                            orders: [],
+                            dailyStats: {},
+                            workTypes: {}
+                        };
+                    }
+                    
+                    const employee = employees[employeeName];
+                    employee.totalOrders++;
+                    
+                    if (totalAmount && !isNaN(totalAmount)) {
+                        employee.totalAmount += totalAmount;
+                    }
+                    
+                    // Analyze work details (columns 6-56, indices 5-55)
+                    for (let i = 5; i <= 55; i++) {
+                        const workType = headers[i];
+                        const quantity = row[i];
+                        const rate = rates[i];
+                        
+                        if (quantity && quantity > 0 && workType) {
+                            const workAmount = quantity * (rate || 0);
+                            
+                            // Work type statistics
+                            if (!employee.workTypes[workType]) {
+                                employee.workTypes[workType] = {
+                                    totalQuantity: 0,
+                                    totalAmount: 0
+                                };
+                            }
+                            employee.workTypes[workType].totalQuantity += quantity;
+                            employee.workTypes[workType].totalAmount += workAmount;
+                        }
+                    }
+                    
+                    // Daily statistics
+                    if (jsDate) {
+                        const dateKey = jsDate.toISOString().split('T')[0];
+                        if (!employee.dailyStats[dateKey]) {
+                            employee.dailyStats[dateKey] = {
+                                ordersCount: 0,
+                                totalAmount: 0
+                            };
+                        }
+                        employee.dailyStats[dateKey].ordersCount++;
+                        if (totalAmount && !isNaN(totalAmount)) {
+                            employee.dailyStats[dateKey].totalAmount += totalAmount;
+                        }
+                    }
+                });
+                
+                // Calculate efficiency
+                const results = Object.values(employees).map(employee => {
+                    // Average amount per order
+                    const avgAmountPerOrder = employee.totalOrders > 0 ? employee.totalAmount / employee.totalOrders : 0;
+                    
+                    // Working days
+                    const workingDays = Object.keys(employee.dailyStats).length;
+                    
+                    // Average amount per day
+                    const avgAmountPerDay = workingDays > 0 ? employee.totalAmount / workingDays : 0;
+                    
+                    // Average orders per day
+                    const avgOrdersPerDay = workingDays > 0 ? employee.totalOrders / workingDays : 0;
+                    
+                    // Top work types
+                    const topWorkTypes = Object.entries(employee.workTypes)
+                        .sort((a, b) => b[1].totalAmount - a[1].totalAmount)
+                        .slice(0, 5)
+                        .map(([type, stats]) => ({
+                            type,
+                            totalQuantity: stats.totalQuantity,
+                            totalAmount: Math.round(stats.totalAmount)
+                        }));
+                    
+                    return {
+                        name: employee.name,
+                        totalOrders: employee.totalOrders,
+                        totalAmount: Math.round(employee.totalAmount),
+                        avgAmountPerOrder: Math.round(avgAmountPerOrder),
+                        workingDays,
+                        avgAmountPerDay: Math.round(avgAmountPerDay),
+                        avgOrdersPerDay: Math.round(avgOrdersPerDay * 100) / 100,
+                        topWorkTypes
+                    };
+                });
+                
+                // Sort by total amount
+                results.sort((a, b) => b.totalAmount - a.totalAmount);
+                
+                displayResults(results);
+                
+            } catch (error) {
+                showError('Ошибка при расчете эффективности: ' + error.message);
+            }
+        }
+        
+        function displayResults(results) {
+            const container = document.getElementById('results');
+            
+            if (results.length === 0) {
+                container.innerHTML = '<div class="no-data">Нет данных для отображения</div>';
+                return;
+            }
+            
+            let html = '';
+            results.forEach((emp, index) => {
+                html += `
+                    <div class="employee-card">
+                        <div class="employee-header">
+                            <div class="employee-name">${index + 1}. ${emp.name}</div>
+                            <div class="employee-rank">${index + 1}</div>
+                        </div>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <span class="stat-label">Всего нарядов:</span>
+                                <span class="stat-value">${emp.totalOrders}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Общая сумма:</span>
+                                <span class="stat-value green">${emp.totalAmount.toLocaleString()} тг</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Средний доход за наряд:</span>
+                                <span class="stat-value">${emp.avgAmountPerOrder.toLocaleString()} тг</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Рабочих дней:</span>
+                                <span class="stat-value">${emp.workingDays}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Средний доход за день:</span>
+                                <span class="stat-value blue">${emp.avgAmountPerDay.toLocaleString()} тг</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Среднее нарядов за день:</span>
+                                <span class="stat-value">${emp.avgOrdersPerDay}</span>
+                            </div>
+                        </div>
+                        <div class="work-types-section">
+                            <div class="work-types-title">Топ видов работ:</div>
+                            <div class="work-types-table">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Вид работы</th>
+                                            <th>Количество</th>
+                                            <th>Сумма</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${emp.topWorkTypes.map(wt => `
+                                            <tr>
+                                                <td>${wt.type}</td>
+                                                <td>${wt.totalQuantity}</td>
+                                                <td class="amount">${wt.totalAmount.toLocaleString()} тг</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
